@@ -3,6 +3,7 @@ package com.pm.patientservice.service;
 import com.pm.patientservice.dto.PatientRequestDTO;
 import com.pm.patientservice.dto.PatientResponseDTO;
 import com.pm.patientservice.exception.EmailAlreadyExistsException;
+import com.pm.patientservice.exception.PatientNotFoundException;
 import com.pm.patientservice.mapper.PatientMapper;
 import com.pm.patientservice.model.Patient;
 import com.pm.patientservice.repository.PatientRepository;
@@ -12,6 +13,7 @@ import org.mockito.MockedStatic;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -22,9 +24,11 @@ public class PatientServiceTests {
   private PatientRepository patientRepository;
   private PatientService patientService;
   private PatientRequestDTO validRequest;
+  private UUID patientId;
 
   @BeforeEach
   public void setUp() {
+    patientId = UUID.randomUUID();
     patientRepository = mock(PatientRepository.class);
     patientService = new PatientService(patientRepository);
     validRequest = new PatientRequestDTO();
@@ -120,5 +124,76 @@ public class PatientServiceTests {
 
     assertTrue(exception.getMessage().contains(validRequest.getEmail()));
     verify(patientRepository, never()).save(any(Patient.class));
+  }
+
+  @Test
+  public void updatePatient_ShouldReturnUpdatedPatient_WhenInputIsValid() {
+
+    Patient patient = new Patient();
+    patient.setId(patientId);
+    patient.setName(validRequest.getName());
+    patient.setEmail(validRequest.getEmail());
+    patient.setAddress(validRequest.getAddress());
+    patient.setDateOfBirth(LocalDate.parse(validRequest.getDateOfBirth()));
+
+    PatientResponseDTO responseDTO = new PatientResponseDTO();
+    responseDTO.setName(validRequest.getName());
+    responseDTO.setId(patientId.toString());
+    responseDTO.setEmail(validRequest.getEmail());
+    responseDTO.setAddress(validRequest.getAddress());
+    responseDTO.setDateOfBirth(validRequest.getDateOfBirth());
+
+    when(patientRepository.findById(patientId)).thenReturn(Optional.of(patient));
+    when(patientRepository.existsByEmailAndIdNot(validRequest.getEmail(), patientId)).thenReturn(false);
+    when(patientRepository.save(any(Patient.class))).thenReturn(patient);
+
+
+    // Act and Assert
+    try (MockedStatic<PatientMapper> mockedStatic = mockStatic(PatientMapper.class)) {
+      mockedStatic.when(() -> PatientMapper.toDto(any(Patient.class))).thenReturn(responseDTO);
+
+      PatientResponseDTO result = patientService.updatePatient(patientId, validRequest);
+
+      assertEquals(patient.getName(), result.getName());
+      assertEquals(patient.getAddress(), result.getAddress());
+      assertEquals(patient.getEmail(), result.getEmail());
+      assertEquals(patient.getDateOfBirth().toString(), result.getDateOfBirth());
+      assertEquals(patient.getId().toString(), result.getId());
+
+      verify(patientRepository).save(patient);
+    }
+  }
+
+  @Test
+  public void updatePatient_ShouldReturnUpdatedPatient_WhenIdDoesNotExist() {
+    when(patientRepository.findById(patientId))
+            .thenThrow(new PatientNotFoundException("Patient not find with ID: " + patientId));
+
+    // Act and Assert
+    PatientNotFoundException exception = assertThrows(
+            PatientNotFoundException.class,
+            () -> patientService.updatePatient(patientId, validRequest)
+    );
+
+    assertEquals("Patient not find with ID: " + patientId, exception.getMessage());
+  }
+
+  @Test
+  public void updatePatient_ShouldReturnUpdatedPatient_WhenEmailIsinvalid() {
+    Patient patient = new Patient();
+    patient.setId(patientId);
+    patient.setName(validRequest.getName());
+    patient.setEmail(validRequest.getEmail());
+    patient.setAddress(validRequest.getAddress());
+    patient.setDateOfBirth(LocalDate.parse(validRequest.getDateOfBirth()));
+
+    when(patientRepository.findById(patientId)).thenReturn(Optional.of(patient));
+    when(patientRepository.existsByEmailAndIdNot(eq(patient.getEmail()), any(UUID.class))).thenReturn(true);
+    EmailAlreadyExistsException ex = assertThrows(
+            EmailAlreadyExistsException.class,
+            () -> patientService.updatePatient(patientId, validRequest)
+    );
+
+    assertEquals("A patient with this email already exists " + validRequest.getEmail(), ex.getMessage());
   }
 }
