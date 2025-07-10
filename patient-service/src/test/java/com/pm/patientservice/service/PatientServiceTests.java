@@ -4,6 +4,7 @@ import com.pm.patientservice.dto.PatientRequestDTO;
 import com.pm.patientservice.dto.PatientResponseDTO;
 import com.pm.patientservice.exception.EmailAlreadyExistsException;
 import com.pm.patientservice.exception.PatientNotFoundException;
+import com.pm.patientservice.grpc.BillingServiceGrpcClient;
 import com.pm.patientservice.mapper.PatientMapper;
 import com.pm.patientservice.model.Patient;
 import com.pm.patientservice.repository.PatientRepository;
@@ -30,7 +31,7 @@ public class PatientServiceTests {
   public void setUp() {
     patientId = UUID.randomUUID();
     patientRepository = mock(PatientRepository.class);
-    patientService = new PatientService(patientRepository);
+    patientService = new PatientService(patientRepository, new BillingServiceGrpcClient("dummyAdress", 1234));
     validRequest = new PatientRequestDTO();
     validRequest.setName("John Smith");
     validRequest.setEmail("john@email.com");
