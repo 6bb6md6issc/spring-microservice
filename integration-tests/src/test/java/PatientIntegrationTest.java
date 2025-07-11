@@ -1,55 +1,43 @@
 import io.restassured.RestAssured;
 import io.restassured.response.Response;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.notNullValue;
 
-public class AuthIntegrationTest {
+public class PatientIntegrationTest {
 
   @BeforeAll
-  static void setUp() {
+  public static void setup() {
     RestAssured.baseURI = "http://localhost:4004";
   }
 
   @Test
-  public void shouldReturnOkWithValidationToken() {
+  public void shouldReturnPatientWithValidToken() {
     String loginPayload = """
               {
                 "email": "testuser@test.com",
                 "password": "password123"
               }
             """;
-    Response response = given()
+    String token = given()
             .contentType("application/json")
             .body(loginPayload)
             .when()
             .post("/auth/login")
             .then()
             .statusCode(200)
-            .body("token", notNullValue())
             .extract()
-            .response();
+            .jsonPath()
+            .get("token");
 
-    System.out.println("generated token: " + response.jsonPath().getString("token"));
-  }
-
-  @Test
-  public void shouldReturnUnauthorizedonInvalidToken() {
-    String loginPayload = """
-              {
-                "email": "invaliduser@test.com",
-                "password": "wrongpassword"
-              }
-            """;
     given()
-            .contentType("application/json")
-            .body(loginPayload)
+            .header("Authorization", "Bearer " + token)
             .when()
-            .post("/auth/login")
+            .get("/api/patients")
             .then()
-            .statusCode(401);
+            .statusCode(200)
+            .body("patients", notNullValue());
   }
 }
