@@ -1,5 +1,6 @@
 package com.pm.patientservice.service;
 
+import com.pm.patientservice.dto.PagedPatientResponseDto;
 import com.pm.patientservice.dto.PatientRequestDTO;
 import com.pm.patientservice.dto.PatientResponseDTO;
 import com.pm.patientservice.exception.EmailAlreadyExistsException;
@@ -11,6 +12,11 @@ import com.pm.patientservice.model.Patient;
 import com.pm.patientservice.repository.PatientRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -35,12 +41,52 @@ public class PatientService {
     this.kafkaProducer = kafkaProducer;
   }
 
-  public List<PatientResponseDTO> getPatients () {
-    List<Patient> patients = patientRepository.findAll();
-    return patients
+  @Cacheable(
+          value = "patients",
+          key = "#page + '-' + #size + '-' +  #sort + '-' + #sortField",
+          condition = "#searchValue == ''"
+  )
+  public PagedPatientResponseDto getPatients (
+          int page,
+          int size,
+          String sort,
+          String sortField,
+          String searchValue
+  ) {
+    log.info("[REDIS]: cache miss - fetching from db");
+    try {
+      Thread.sleep(2000);
+    } catch (InterruptedException e) {
+      log.error(e.getMessage());
+    }
+    Pageable pageable = PageRequest.of(
+            page-1,
+            size,
+            sort.equalsIgnoreCase("desc")
+                    ? Sort.by(sortField).descending()
+                    : Sort.by(sortField).ascending()
+    );
+
+    Page<Patient> patientPage;
+
+    if (searchValue == null || searchValue.isBlank()) {
+      patientPage = patientRepository.findAll(pageable);
+    } else {
+      patientPage = patientRepository.findByNameContainingIgnoreCase(searchValue, pageable);
+    }
+
+    List<PatientResponseDTO> patientResponseDtos = patientPage.getContent()
             .stream()
             .map(PatientMapper::toDto)
             .toList();
+
+    return new PagedPatientResponseDto(
+            patientResponseDtos,
+            patientPage.getNumber() + 1,
+            patientPage.getSize(),
+            patientPage.getTotalPages(),
+            (int) patientPage.getTotalElements()
+    );
   }
 
   public PatientResponseDTO createPatient (PatientRequestDTO patientRequestDTO) {

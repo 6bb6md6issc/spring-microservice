@@ -3,6 +3,9 @@ package com.pm.patientservice.grpc;
 import billing.BillingRequest;
 import billing.BillingResponse;
 import billing.BillingServiceGrpc;
+import com.pm.patientservice.kafka.kafkaProducer;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import org.slf4j.Logger;
@@ -14,19 +17,23 @@ import org.springframework.stereotype.Service;
 public class BillingServiceGrpcClient {
   private static final Logger log = LoggerFactory.getLogger(BillingServiceGrpcClient.class);
   private final BillingServiceGrpc.BillingServiceBlockingStub blockingStub;
+  private final kafkaProducer kafkaProducer;
 
   // localhost:9001/BillingService/CreatePatientAccount
   public BillingServiceGrpcClient(
           @Value("${billing.service.address:localhost}") String serverAddress,
-          @Value("${billing.service.grpc.port:9001}") int serverPort
-  ) {
+          @Value("${billing.service.grpc.port:9001}") int serverPort,
+          kafkaProducer kafkaProducer) {
     log.info("Connecting to Billing Service Grpc service at {}:{}", serverAddress, serverPort);
     ManagedChannel channel = ManagedChannelBuilder.forAddress(serverAddress, serverPort)
             .usePlaintext().build();
 
     blockingStub = BillingServiceGrpc.newBlockingStub(channel);
+    this.kafkaProducer = kafkaProducer;
   }
 
+  @CircuitBreaker(name = "billingService", fallbackMethod = "billingFallback")
+  @Retry(name = "billingRetry")
   public BillingResponse createBillingAccount(String patientId, String name, String email) {
     BillingRequest request = BillingRequest.newBuilder()
             .setPatientId(patientId)
@@ -37,5 +44,19 @@ public class BillingServiceGrpcClient {
     log.info("Received response from billing service via GRPC: {}", response);
 
     return response;
+  }
+
+  public BillingResponse billingFallback(String patientId, String name, String email, Throwable t) {
+    log.warn(
+            "[CIRCUIT BREAKER] Billing Service is unavailable. Triggered fallback: {}", t.getMessage()
+    );
+
+//    kafkaProducer.sendBillingAccountEvent()
+
+    return BillingResponse.newBuilder()
+            .setAccountId("")
+            .setStatus("PENDING")
+            .build();
+
   }
 }
