@@ -1,10 +1,11 @@
 ### POST request to create new Patient entity
-POST http://localhost:4004/patients
+POST http://localhost:4004/api/patients
 Content-Type: application/json
+Authorization: Bearer {{token}}
 
 {
   "name" : "John Smith with Kafka Test",
-  "email" : "kafka_test@email.com",
+  "email" : "kafka_test_new2@email.com",
   "address" : "123 main street",
   "dateOfBirth": "2000-01-01",
   "registeredDate": "2025-07-09"

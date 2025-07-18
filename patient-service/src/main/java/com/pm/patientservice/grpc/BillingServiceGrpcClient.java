@@ -51,7 +51,7 @@ public class BillingServiceGrpcClient {
             "[CIRCUIT BREAKER] Billing Service is unavailable. Triggered fallback: {}", t.getMessage()
     );
 
-//    kafkaProducer.sendBillingAccountEvent()
+    kafkaProducer.sendBillingAccountEvent(patientId, name, email);
 
     return BillingResponse.newBuilder()
             .setAccountId("")
